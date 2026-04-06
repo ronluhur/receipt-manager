@@ -10,6 +10,7 @@ import {
   Plus,
   Trash2,
   Lock,
+  AlertTriangle,
 } from "lucide-react";
 import {
   LineChart,
@@ -203,6 +204,7 @@ export default function App() {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [currentUser, setCurrentUser] = useState("Hahn");
   const [manualReceipt, setManualReceipt] = useState(emptyManual("Hahn"));
+  const [ocrWarnings, setOcrWarnings] = useState({});
 
 
   // Load data from localStorage on mount
@@ -225,6 +227,34 @@ export default function App() {
     if (transfers.length > 0) localStorage.setItem("transferData", JSON.stringify(transfers));
   }, [transfers]);
   // ---- OCR: send image to our serverless API ----
+  // OCR validation: detect missing or suspicious data
+  const validateReceipt = (receiptData) => {
+    const warnings = [];
+    if (!receiptData.items || receiptData.items.length === 0) {
+      warnings.push("No items detected - receipt may be blank or too faded");
+    }
+    if (receiptData.items && receiptData.items.length > 0) {
+      const itemsTotal = receiptData.items.reduce((s, i) => s + (i.total || 0), 0);
+      const reported = receiptData.total_vnd || 0;
+      if (reported > 0 && Math.abs(itemsTotal - reported) > reported * 0.1) {
+        warnings.push("Total mismatch: items=" + itemsTotal.toLocaleString() + " vs receipt=" + reported.toLocaleString() + " VND");
+      }
+      if (receiptData.items.some(i => !i.unit_price || i.unit_price === 0)) {
+        warnings.push("Some items have no price - OCR may have missed pricing");
+      }
+      if (receiptData.items.some(i => !i.name || i.name.trim() === "")) {
+        warnings.push("Some items have no name - text may be too faded");
+      }
+    }
+    if (!receiptData.store_name || receiptData.store_name === "Unknown Store") {
+      warnings.push("Store name not detected");
+    }
+    if (!receiptData.date) {
+      warnings.push("Date not detected on receipt");
+    }
+    return warnings;
+  };
+
   async function processReceipt(file) {
     if (!file) return;
     setLoading(true);
@@ -259,8 +289,13 @@ export default function App() {
         submitted_by: currentUser,
       };
 
+      // Run OCR validation
+      const warnings = validateReceipt(newReceipt);
+      if (warnings.length > 0) {
+        setOcrWarnings(prev => ({...prev, [newReceipt.id]: warnings}));
+      }
       setReceipts((prev) => [newReceipt, ...prev]);
-      sendToSheets(newReceipt);
+      sendToSheets({...newReceipt, image_base64: base64});
     } catch (error) {
       alert("Error processing receipt: " + error.message);
     } finally {
@@ -1133,6 +1168,18 @@ export default function App() {
                     <div className="p-4 border-t border-slate-700/50 bg-slate-900/30">
                       <div className="space-y-4">
                         <div className="space-y-2">
+                    {ocrWarnings[receipt.id] && ocrWarnings[receipt.id].length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+                        <div className="flex items-center gap-2 text-amber-700 font-medium text-sm mb-1">
+                          <AlertTriangle size={16} />
+                          <span>OCR Warning</span>
+                        </div>
+                        {ocrWarnings[receipt.id].map((w, wi) => (
+                          <p key={wi} className="text-amber-600 text-xs ml-6">{w}</p>
+                        ))}
+                        <p className="text-amber-500 text-xs ml-6 mt-1 italic">Check the original image in Google Drive</p>
+                      </div>
+                    )}
                           {receipt.items.map((item, idx) => (
                             <div
                               key={idx}
