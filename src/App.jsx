@@ -205,6 +205,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState("Hahn");
   const [manualReceipt, setManualReceipt] = useState(emptyManual("Hahn"));
   const [ocrWarnings, setOcrWarnings] = useState({});
+  const [imageHashes, setImageHashes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("receiptImageHashes") || "{}"); } catch { return {}; }
+  });
+  const [processingStatus, setProcessingStatus] = useState(null);
 
 
   // Load data from localStorage on mount
@@ -227,6 +231,72 @@ export default function App() {
     if (transfers.length > 0) localStorage.setItem("transferData", JSON.stringify(transfers));
   }, [transfers]);
   // ---- OCR: send image to our serverless API ----
+  // Generate perceptual hash from image for duplicate detection
+  const getImageHash = (base64Str) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 8;
+        canvas.height = 8;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, 8, 8);
+        const pixels = ctx.getImageData(0, 0, 8, 8).data;
+        let grays = [];
+        for (let i = 0; i < pixels.length; i += 4) {
+          grays.push(pixels[i] * 0.299 + pixels[i+1] * 0.587 + pixels[i+2] * 0.114);
+        }
+        const avg = grays.reduce((a, b) => a + b, 0) / grays.length;
+        const hash = grays.map(g => g >= avg ? "1" : "0").join("");
+        resolve(hash);
+      };
+      img.onerror = () => resolve(null);
+      img.src = base64Str;
+    });
+  };
+
+  // Compare two hashes - returns similarity 0-1
+  const hashSimilarity = (h1, h2) => {
+    if (!h1 || !h2 || h1.length !== h2.length) return 0;
+    let match = 0;
+    for (let i = 0; i < h1.length; i++) { if (h1[i] === h2[i]) match++; }
+    return match / h1.length;
+  };
+
+  // Check if image is a duplicate of an existing receipt
+  const checkDuplicate = (newHash) => {
+    if (!newHash) return null;
+    for (const [id, storedHash] of Object.entries(imageHashes)) {
+      const sim = hashSimilarity(newHash, storedHash);
+      if (sim >= 0.92) {
+        const matchReceipt = receipts.find(r => String(r.id) === String(id));
+        return matchReceipt || { id };
+      }
+    }
+    return null;
+  };
+
+  // Call OCR API and return parsed result
+  const callOcrApi = async (base64Str) => {
+    const res = await fetch("/api/process-receipt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: base64Str }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return typeof data.result === "string" ? JSON.parse(data.result) : data.result;
+  };
+
+  // Check if OCR result looks like a failure
+  const isOcrFailure = (result) => {
+    if (!result) return true;
+    if (!result.items || result.items.length === 0) return true;
+    const allEmpty = result.items.every(i => !i.name || i.name.trim() === "");
+    if (allEmpty) return true;
+    return false;
+  };
+
   // OCR validation: detect missing or suspicious data
   const validateReceipt = (receiptData) => {
     const warnings = [];
@@ -256,37 +326,58 @@ export default function App() {
   };
 
   async function processReceipt(file) {
-    if (!file) return;
     setLoading(true);
+    setProcessingStatus(null);
     try {
       const reader = new FileReader();
-      const base64 = await new Promise((resolve, reject) => {
-        reader.onload = (e) => resolve(e.target.result.split(",")[1]);
-        reader.onerror = reject;
+      const base64 = await new Promise((resolve) => {
+        reader.onload = () => resolve(reader.result);
         reader.readAsDataURL(file);
       });
 
-      const res = await fetch("/api/process-receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: base64,
-          mediaType: file.type || "image/jpeg",
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Server error");
+      // Duplicate check via image fingerprint
+      const imgHash = await getImageHash(base64);
+      const dupMatch = checkDuplicate(imgHash);
+      if (dupMatch) {
+        const dupStore = dupMatch.store_name || "a previous receipt";
+        setProcessingStatus({ type: "duplicate", message: "Duplicate detected! This looks the same as " + dupStore + " (ID: " + dupMatch.id + "). Skipping." });
+        setLoading(false);
+        return;
       }
 
-      const parsed = await res.json();
+      // First OCR attempt
+      let parsed = null;
+      try {
+        parsed = await callOcrApi(base64);
+      } catch (e) {
+        parsed = null;
+      }
 
+      // Auto-retry once if OCR failed
+      if (isOcrFailure(parsed)) {
+        setProcessingStatus({ type: "retrying", message: "OCR could not read receipt clearly. Retrying..." });
+        try {
+          parsed = await callOcrApi(base64);
+        } catch (e) {
+          parsed = null;
+        }
+      }
+
+      // If still failed after retry, show error
+      if (isOcrFailure(parsed)) {
+        setProcessingStatus({ type: "error", message: "OCR failed to read this receipt after 2 attempts. The image may be too faded or unclear. Try retaking the photo with better lighting." });
+        // Still save image to Drive via sheets
+        sendToSheets({ id: Date.now(), items: [], store_name: "OCR FAILED", date: new Date().toISOString().split("T")[0], image_base64: base64, total_vnd: 0, submitted_by: currentUser, is_ore_expense: false, original_store_name: "OCR FAILED" });
+        setLoading(false);
+        return;
+      }
+
+      // Success - create receipt
       const newReceipt = {
         id: Date.now(),
         ...parsed,
-        processed_at: new Date().toISOString(),
         submitted_by: currentUser,
+        processed_at: new Date().toISOString(),
       };
 
       // Run OCR validation
@@ -294,10 +385,20 @@ export default function App() {
       if (warnings.length > 0) {
         setOcrWarnings(prev => ({...prev, [newReceipt.id]: warnings}));
       }
-      setReceipts((prev) => [newReceipt, ...prev]);
+
+      // Save image hash for future duplicate checks
+      if (imgHash) {
+        const newHashes = {...imageHashes, [newReceipt.id]: imgHash};
+        setImageHashes(newHashes);
+        localStorage.setItem("receiptImageHashes", JSON.stringify(newHashes));
+      }
+
+      setReceipts([newReceipt, ...receipts]);
       sendToSheets({...newReceipt, image_base64: base64});
+      setProcessingStatus({ type: "success", message: "Receipt processed successfully!" });
     } catch (error) {
-      alert("Error processing receipt: " + error.message);
+      console.error("Receipt processing error:", error);
+      setProcessingStatus({ type: "error", message: "Error processing receipt: " + error.message });
     } finally {
       setLoading(false);
     }
@@ -636,6 +737,27 @@ export default function App() {
                   </div>
                 </div>
               </label>
+              {processingStatus && (
+                <div className={`mt-3 p-3 rounded-lg border flex items-start gap-2 ${
+                  processingStatus.type === "error" ? "bg-red-50 border-red-200 text-red-700" :
+                  processingStatus.type === "duplicate" ? "bg-orange-50 border-orange-200 text-orange-700" :
+                  processingStatus.type === "retrying" ? "bg-blue-50 border-blue-200 text-blue-700" :
+                  "bg-green-50 border-green-200 text-green-700"
+                }`}>
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">
+                      {processingStatus.type === "error" ? "OCR Failed" :
+                       processingStatus.type === "duplicate" ? "Duplicate Receipt" :
+                       processingStatus.type === "retrying" ? "Retrying OCR..." :
+                       "Success"}
+                    </p>
+                    <p className="text-xs mt-1">{processingStatus.message}</p>
+                  </div>
+                  <button onClick={() => setProcessingStatus(null)} className="text-sm opacity-50 hover:opacity-100">x</button>
+                </div>
+              )}
+
             </div>
 
             {/* Manual Entry */}
