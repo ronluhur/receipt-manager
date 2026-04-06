@@ -285,7 +285,8 @@ export default function App() {
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    return typeof data.result === "string" ? JSON.parse(data.result) : data.result;
+    const rawResult = data.data || data.result || data;
+    return typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
   };
 
   // Check if OCR result looks like a failure
