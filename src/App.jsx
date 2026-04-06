@@ -278,10 +278,19 @@ export default function App() {
 
   // Call OCR API and return parsed result
   const callOcrApi = async (base64Str) => {
+    // Strip data URL prefix and extract mediaType
+    let imageData = base64Str;
+    let mediaType = "image/jpeg";
+    if (base64Str.includes(",")) {
+      const parts = base64Str.split(",");
+      imageData = parts[1];
+      const match = parts[0].match(/data:([^;]+)/);
+      if (match) mediaType = match[1];
+    }
     const res = await fetch("/api/process-receipt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: base64Str }),
+      body: JSON.stringify({ image: imageData, mediaType }),
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
