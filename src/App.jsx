@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Upload,
   Eye,
@@ -176,6 +176,24 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState("Hahn");
   const [manualReceipt, setManualReceipt] = useState(emptyManual("Hahn"));
 
+
+  // Load data from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("receiptData");
+    const savedTransfers = localStorage.getItem("transferData");
+    if (saved) { try { setReceipts(JSON.parse(saved)); } catch(e) { console.error("Failed to load receipts", e); } }
+    if (savedTransfers) { try { setTransfers(JSON.parse(savedTransfers)); } catch(e) { console.error("Failed to load transfers", e); } }
+  }, []);
+
+  // Persist receipts to localStorage
+  useEffect(() => {
+    if (receipts.length > 0) localStorage.setItem("receiptData", JSON.stringify(receipts));
+  }, [receipts]);
+
+  // Persist transfers to localStorage
+  useEffect(() => {
+    if (transfers.length > 0) localStorage.setItem("transferData", JSON.stringify(transfers));
+  }, [transfers]);
   // ---- OCR: send image to our serverless API ----
   async function processReceipt(file) {
     if (!file) return;
