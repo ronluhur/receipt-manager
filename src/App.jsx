@@ -475,7 +475,7 @@ export default function App() {
         </div>
 
         {/* Action Cards: Transfer + Upload + Manual */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
           {/* Record Transfer */}
           <div className="p-5 sm:p-6 rounded-xl bg-slate-800/50 border border-slate-700/50">
             <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
@@ -514,7 +514,7 @@ export default function App() {
           </div>
 
           {/* Upload + Manual */}
-          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+          <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             {/* Photo Upload */}
             <div className="p-5 sm:p-6 rounded-xl bg-slate-800/50 border border-slate-700/50">
               <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
@@ -870,7 +870,7 @@ export default function App() {
         )}
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <div className="p-5 sm:p-6 rounded-xl bg-slate-800/50 border border-slate-700/50">
             <h2 className="text-lg font-semibold text-slate-100 mb-6">
               Spending by Category
