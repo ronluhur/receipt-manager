@@ -209,6 +209,9 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("receiptImageHashes") || "{}"); } catch { return {}; }
   });
   const [processingStatus, setProcessingStatus] = useState(null);
+  const [pendingReceipt, setPendingReceipt] = useState(null);
+  const [pendingBase64, setPendingBase64] = useState(null);
+  const [pendingDateInput, setPendingDateInput] = useState("");
 
 
   // Load data from localStorage on mount
@@ -396,6 +399,27 @@ export default function App() {
         setOcrWarnings(prev => ({...prev, [newReceipt.id]: warnings}));
       }
 
+      // Date validation - check if receipt is from current or previous month
+      const receiptDate = new Date(newReceipt.date + "T00:00:00");
+      const now = new Date();
+      const curMonth = now.getFullYear() * 12 + now.getMonth();
+      const recMonth = receiptDate.getFullYear() * 12 + receiptDate.getMonth();
+      const diff = curMonth - recMonth;
+
+      if (diff < 0 || diff > 1 || isNaN(receiptDate.getTime())) {
+        // Date is outside current/previous month range - ask user
+        setPendingReceipt(newReceipt);
+        setPendingBase64(base64);
+        setPendingDateInput(newReceipt.date || "");
+        if (imgHash) {
+          const newHashes = {...imageHashes, [newReceipt.id]: imgHash};
+          setImageHashes(newHashes);
+          localStorage.setItem("receiptImageHashes", JSON.stringify(newHashes));
+        }
+        setProcessingStatus({ type: "warning", message: "Date needs confirmation - see prompt below." });
+        return;
+      }
+
       // Save image hash for future duplicate checks
       if (imgHash) {
         const newHashes = {...imageHashes, [newReceipt.id]: imgHash};
@@ -412,6 +436,25 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // ---- Date confirmation for OCR ----
+  function confirmDateAndSave(correctedDate) {
+    if (!pendingReceipt) return;
+    const updated = { ...pendingReceipt, date: correctedDate };
+    setReceipts([updated, ...receipts]);
+    sendToSheets({ ...updated, image_base64: pendingBase64 });
+    setPendingReceipt(null);
+    setPendingBase64(null);
+    setPendingDateInput("");
+    setProcessingStatus({ type: "success", message: "Receipt saved with corrected date!" });
+  }
+
+  function cancelPendingReceipt() {
+    setPendingReceipt(null);
+    setPendingBase64(null);
+    setPendingDateInput("");
+    setProcessingStatus({ type: "error", message: "Receipt discarded." });
   }
 
   // ---- Transfers ----
@@ -551,6 +594,50 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-900">
+      {/* Date Confirmation Modal */}
+      {pendingReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-amber-400 mb-3">Date Needs Confirmation</h3>
+            <p className="text-slate-300 mb-2">
+              The OCR read this receipt date as:
+            </p>
+            <p className="text-2xl font-mono text-white mb-3">{pendingReceipt.date}</p>
+            <p className="text-slate-400 text-sm mb-4">
+              This date is not in the current or previous month. Please confirm or correct it.
+            </p>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Correct date:</label>
+            <input
+              type="date"
+              value={pendingDateInput}
+              onChange={(e) => setPendingDateInput(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white mb-4 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => confirmDateAndSave(pendingDateInput)}
+                disabled={!pendingDateInput}
+                className="flex-1 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold transition-all disabled:opacity-50"
+              >
+                Save with this date
+              </button>
+              <button
+                onClick={() => confirmDateAndSave(pendingReceipt.date)}
+                className="flex-1 px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-white font-semibold transition-all"
+              >
+                Keep original
+              </button>
+            </div>
+            <button
+              onClick={cancelPendingReceipt}
+              className="w-full mt-2 px-4 py-2 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-red-300 text-sm transition-all"
+            >
+              Discard receipt
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-xl border-b border-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
