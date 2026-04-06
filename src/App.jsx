@@ -81,6 +81,34 @@ function sendToSheets(data) {
   }
 }
 
+// Fetch all receipts & transfers back from Google Sheets
+async function loadFromSheets(setReceipts, setTransfers) {
+  if (!SHEETS_URL) return;
+  try {
+    const res = await fetch(SHEETS_URL + "?action=getAll");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.receipts && data.receipts.length > 0) {
+      setReceipts(prev => {
+        const ids = new Set(prev.map(r => r.id));
+        const merged = [...prev];
+        data.receipts.forEach(r => { if (!ids.has(r.id)) merged.push(r); });
+        return merged;
+      });
+    }
+    if (data.transfers && data.transfers.length > 0) {
+      setTransfers(prev => {
+        const ids = new Set(prev.map(t => t.id));
+        const merged = [...prev];
+        data.transfers.forEach(t => { if (!ids.has(t.id)) merged.push(t); });
+        return merged;
+      });
+    }
+  } catch (e) {
+    console.error("Failed to load from Sheets:", e);
+  }
+}
+
 function emptyItem() {
   return { name: "", category: "Other", quantity: 1, unit_price: 0, total: 0 };
 }
@@ -183,6 +211,8 @@ export default function App() {
     const savedTransfers = localStorage.getItem("transferData");
     if (saved) { try { setReceipts(JSON.parse(saved)); } catch(e) { console.error("Failed to load receipts", e); } }
     if (savedTransfers) { try { setTransfers(JSON.parse(savedTransfers)); } catch(e) { console.error("Failed to load transfers", e); } }
+    // Then sync from Google Sheets for cross-device data
+    loadFromSheets(setReceipts, setTransfers);
   }, []);
 
   // Persist receipts to localStorage
