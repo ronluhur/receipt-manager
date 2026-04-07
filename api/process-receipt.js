@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       '      "total": 0,',
       '      "weight_kg": null,',
       '      "price_per_kg": null,',
-      '      "category": "One of: Vegetables, Fruits, Meat, Fish, Dairy, Household, ORE (Official Residence), Other"',
+      '      "category": "One of: Meat, Vegetables, Fruit, Staples, Cleaning Products, Flowers, Other Groceries, Soda Water & Soft Drinks, ORE (Official Residence), Other"',
       "    }",
       "  ],",
       '  "subtotal": 0,',
