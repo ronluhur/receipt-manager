@@ -240,11 +240,11 @@ export default function App() {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        canvas.width = 8;
-        canvas.height = 8;
+        canvas.width = 16;
+        canvas.height = 16;
         const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, 8, 8);
-        const pixels = ctx.getImageData(0, 0, 8, 8).data;
+        ctx.drawImage(img, 0, 0, 16, 16);
+        const pixels = ctx.getImageData(0, 0, 16, 16).data;
         let grays = [];
         for (let i = 0; i < pixels.length; i += 4) {
           grays.push(pixels[i] * 0.299 + pixels[i+1] * 0.587 + pixels[i+2] * 0.114);
@@ -271,7 +271,7 @@ export default function App() {
     if (!newHash) return null;
     for (const [id, storedHash] of Object.entries(imageHashes)) {
       const sim = hashSimilarity(newHash, storedHash);
-      if (sim >= 0.92) {
+      if (sim >= 0.97) {
         const matchReceipt = receipts.find(r => String(r.id) === String(id));
         return matchReceipt || { id };
       }
