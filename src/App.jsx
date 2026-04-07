@@ -42,12 +42,13 @@ const COLORS = [
 ];
 
 const CATEGORIES = [
-  "Vegetables",
-  "Fruits",
-  "Meat",
-  "Fish",
-  "Dairy",
-  "Household",
+  "Proteins",
+  "Vegetables & Fruits",
+  "Staples & Grains",
+  "Dairy & Eggs",
+  "Drinks & Beverages",
+  "Snacks & Sweets",
+  "Household & Cleaning",
   "ORE (Official Residence)",
   "Other",
 ];
@@ -671,6 +672,16 @@ export default function App() {
   const categoryData = Object.entries(categoryBreakdown).map(
     ([name, value]) => ({ name, value: Math.round(value) })
   );
+
+  const storeBreakdown = {};
+  monthlyReceipts.forEach((receipt) => {
+    const store = receipt.store_name || "Unknown";
+    storeBreakdown[store] = (storeBreakdown[store] || 0) + receipt.total_vnd;
+  });
+  const storeData = Object.entries(storeBreakdown)
+    .map(([name, value]) => ({ name, value: Math.round(value) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
 
   const monthlyTrend = {};
   receipts.forEach((receipt) => {
@@ -1369,6 +1380,65 @@ export default function App() {
               </div>
             )}
           </div>
+
+          <div className="p-5 sm:p-6 rounded-xl bg-slate-800/50 border border-slate-700/50">
+            <h2 className="text-lg font-semibold text-slate-100 mb-6">
+              Top Stores
+            </h2>
+            {storeData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={storeData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={95}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {storeData.map((_, index) => (
+                      <Cell
+                        key={"store-" + index}
+                        fill={COLORS[(index + 3) % COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value) => fmtM(value)}
+                    contentStyle={{
+                      background: "#1E293B",
+                      border: "1px solid #475569",
+                      borderRadius: "8px",
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-72 flex items-center justify-center text-slate-500">
+                No data for this month
+              </div>
+            )}
+            <div className="mt-4 space-y-2">
+              {storeData.map((store, idx) => (
+                <div
+                  key={store.name}
+                  className="flex justify-between items-center text-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{
+                        backgroundColor: COLORS[(idx + 3) % COLORS.length],
+                      }}
+                    />
+                    <span className="text-slate-300">{store.name}</span>
+                  </div>
+                  <span className="text-slate-400">{fmtM(store.value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Month Summary */}
@@ -1376,47 +1446,28 @@ export default function App() {
           <h2 className="text-lg font-semibold text-slate-100 mb-4">
             Month Summary
           </h2>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400">Reconciliation</span>
-              <span
-                className={`font-semibold ${
-                  Math.abs(balance) < 100000
-                    ? "text-emerald-400"
-                    : "text-yellow-400"
-                }`}
-              >
-                {Math.abs(balance) < 100000 ? "✓ Balanced" : "⚠ Check"}
-              </span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700/30">
+              <p className="text-xs text-slate-500 mb-1">Total Spent</p>
+              <p className="text-lg font-bold text-blue-300">{fmtM2(totalSpent)}</p>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400">Variance</span>
-              <span className="text-slate-300 font-mono">
-                {fmtVND(balance)}
-              </span>
+            <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700/30">
+              <p className="text-xs text-slate-500 mb-1">Remaining</p>
+              <p className={"text-lg font-bold " + (balance >= 0 ? "text-emerald-400" : "text-red-400")}>{fmtM2(balance)}</p>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400">Variance %</span>
-              <span className="text-slate-300">
-                {totalTransferred
-                  ? ((balance / totalTransferred) * 100).toFixed(2)
-                  : 0}
-                %
-              </span>
+            <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700/30">
+              <p className="text-xs text-slate-500 mb-1">Receipts</p>
+              <p className="text-lg font-bold text-slate-200">{monthlyReceipts.length}</p>
             </div>
-            <hr className="border-slate-700" />
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400">Receipts</span>
-              <span className="text-slate-300 font-semibold">
-                {monthlyReceipts.length}
-              </span>
+            <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700/30">
+              <p className="text-xs text-slate-500 mb-1">Avg / Receipt</p>
+              <p className="text-lg font-bold text-slate-200">{monthlyReceipts.length > 0 ? fmtM2(Math.round(totalSpent / monthlyReceipts.length)) : "—"}</p>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400">Transfers</span>
-              <span className="text-slate-300 font-semibold">
-                {monthlyTransfers.length}
-              </span>
-            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+            <span>Transferred: {fmtM2(totalTransferred)}</span>
+            <span>Transfers: {monthlyTransfers.length}</span>
+            {monthlyReceipts.length > 0 && <span>Daily avg: {fmtM2(Math.round(totalSpent / new Date(selectedMonth + "-28").getDate()))}</span>}
           </div>
         </div>
 
