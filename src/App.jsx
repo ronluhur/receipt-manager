@@ -1484,6 +1484,16 @@ export default function App() {
                                 ★ ORE
                               </span>
                             )}
+                            {ocrWarnings[receipt.id] && ocrWarnings[receipt.id].length > 0 && !verifiedTotals[receipt.id] && (
+                              <span className="px-2 py-0.5 rounded text-xs bg-amber-900/50 border border-amber-600 text-amber-300 flex items-center gap-1">
+                                <AlertTriangle size={10} /> Check
+                              </span>
+                            )}
+                            {verifiedTotals[receipt.id] && (
+                              <span className="px-2 py-0.5 rounded text-xs bg-green-900/50 border border-green-700 text-green-300 flex items-center gap-1">
+                                <CheckCircle size={10} /> Verified
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
