@@ -11,6 +11,10 @@ import {
   Trash2,
   Lock,
   AlertTriangle,
+  Pencil,
+  Save,
+  X,
+  MessageSquare,
 } from "lucide-react";
 import {
   LineChart,
@@ -212,6 +216,18 @@ export default function App() {
   const [pendingReceipt, setPendingReceipt] = useState(null);
   const [pendingBase64, setPendingBase64] = useState(null);
   const [pendingDateInput, setPendingDateInput] = useState("");
+  const [editingDate, setEditingDate] = useState(null);
+  const [editingDateValue, setEditingDateValue] = useState("");
+  const [editingTotal, setEditingTotal] = useState(null);
+  const [editingTotalValue, setEditingTotalValue] = useState("");
+  const [receiptNotes, setReceiptNotes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("receiptNotes") || "{}"); } catch { return {}; }
+  });
+  const [verifiedTotals, setVerifiedTotals] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("verifiedTotals") || "{}"); } catch { return {}; }
+  });
+  const [editingNote, setEditingNote] = useState(null);
+  const [editingNoteValue, setEditingNoteValue] = useState("");
 
 
   // Load data from localStorage on mount
@@ -489,6 +505,57 @@ export default function App() {
     setPendingBase64(null);
     setPendingDateInput("");
     setProcessingStatus({ type: "error", message: "Receipt discarded." });
+  }
+
+  // ---- Edit receipt date (post-save) ----
+  function updateReceiptDate(receiptId, newDate) {
+    setReceipts(prev => {
+      const updated = prev.map(r => r.id === receiptId ? { ...r, date: newDate } : r);
+      localStorage.setItem("receiptData", JSON.stringify(updated));
+      return updated;
+    });
+    setEditingDate(null);
+    setEditingDateValue("");
+  }
+
+  // ---- Verify total as correct ----
+  function verifyTotal(receiptId) {
+    const updated = { ...verifiedTotals, [receiptId]: true };
+    setVerifiedTotals(updated);
+    localStorage.setItem("verifiedTotals", JSON.stringify(updated));
+  }
+
+  // ---- Unverify total ----
+  function unverifyTotal(receiptId) {
+    const updated = { ...verifiedTotals };
+    delete updated[receiptId];
+    setVerifiedTotals(updated);
+    localStorage.setItem("verifiedTotals", JSON.stringify(updated));
+  }
+
+  // ---- Adjust total manually ----
+  function adjustTotal(receiptId, newTotal) {
+    const val = parseFloat(newTotal);
+    if (isNaN(val) || val <= 0) return;
+    setReceipts(prev => {
+      const updated = prev.map(r => r.id === receiptId ? { ...r, total_vnd: val } : r);
+      localStorage.setItem("receiptData", JSON.stringify(updated));
+      return updated;
+    });
+    const vUpdated = { ...verifiedTotals, [receiptId]: true };
+    setVerifiedTotals(vUpdated);
+    localStorage.setItem("verifiedTotals", JSON.stringify(vUpdated));
+    setEditingTotal(null);
+    setEditingTotalValue("");
+  }
+
+  // ---- Save note for a receipt ----
+  function saveReceiptNote(receiptId, note) {
+    const updated = { ...receiptNotes, [receiptId]: note };
+    setReceiptNotes(updated);
+    localStorage.setItem("receiptNotes", JSON.stringify(updated));
+    setEditingNote(null);
+    setEditingNoteValue("");
   }
 
   // ---- Transfers ----
@@ -1385,9 +1452,23 @@ export default function App() {
                             {receipt.store_name}
                           </h3>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
-                            <p className="text-sm text-slate-400">
-                              {receipt.date}
-                            </p>
+                            {editingDate === receipt.id ? (
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="date"
+                                  value={editingDateValue}
+                                  onChange={(e) => setEditingDateValue(e.target.value)}
+                                  className="px-2 py-0.5 rounded text-sm bg-slate-700 border border-slate-600 text-slate-200"
+                                />
+                                <button onClick={() => updateReceiptDate(receipt.id, editingDateValue)} className="p-1 rounded hover:bg-green-900/30 text-green-400"><Save size={14} /></button>
+                                <button onClick={() => setEditingDate(null)} className="p-1 rounded hover:bg-red-900/30 text-red-400"><X size={14} /></button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <p className="text-sm text-slate-400">{receipt.date}</p>
+                                <button onClick={(e) => { e.stopPropagation(); setEditingDate(receipt.id); setEditingDateValue(receipt.date); }} className="p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300"><Pencil size={12} /></button>
+                              </div>
+                            )}
                             {receipt.is_manual && (
                               <span className="px-2 py-0.5 rounded text-xs bg-emerald-900/50 border border-emerald-700 text-emerald-300">
                                 Manual
@@ -1421,16 +1502,48 @@ export default function App() {
                     <div className="p-4 border-t border-slate-700/50 bg-slate-900/30">
                       <div className="space-y-4">
                         <div className="space-y-2">
-                    {ocrWarnings[receipt.id] && ocrWarnings[receipt.id].length > 0 && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
-                        <div className="flex items-center gap-2 text-amber-700 font-medium text-sm mb-1">
+                    {ocrWarnings[receipt.id] && ocrWarnings[receipt.id].length > 0 && !verifiedTotals[receipt.id] && (
+                      <div className="bg-amber-950/40 border border-amber-700/50 rounded-lg p-3 mb-3">
+                        <div className="flex items-center gap-2 text-amber-400 font-medium text-sm mb-1">
                           <AlertTriangle size={16} />
                           <span>OCR Warning</span>
                         </div>
                         {ocrWarnings[receipt.id].map((w, wi) => (
-                          <p key={wi} className="text-amber-600 text-xs ml-6">{w}</p>
+                          <p key={wi} className="text-amber-300/80 text-xs ml-6">{w}</p>
                         ))}
-                        <p className="text-amber-500 text-xs ml-6 mt-1 italic">Check the original image in Google Drive</p>
+                        <p className="text-amber-500/70 text-xs ml-6 mt-1 italic">Check the original image in Google Drive</p>
+                        <div className="flex flex-wrap gap-2 mt-3 ml-6">
+                          <button onClick={() => verifyTotal(receipt.id)} className="px-3 py-1 rounded text-xs bg-green-900/40 hover:bg-green-900/60 border border-green-700/50 text-green-300 flex items-center gap-1"><CheckCircle size={12} /> Verified correct</button>
+                          <button onClick={() => { setEditingTotal(receipt.id); setEditingTotalValue(String(receipt.total_vnd)); }} className="px-3 py-1 rounded text-xs bg-blue-900/40 hover:bg-blue-900/60 border border-blue-700/50 text-blue-300 flex items-center gap-1"><Pencil size={12} /> Adjust total</button>
+                          <button onClick={() => { setEditingNote(receipt.id); setEditingNoteValue(receiptNotes[receipt.id] || ""); }} className="px-3 py-1 rounded text-xs bg-slate-700/40 hover:bg-slate-700/60 border border-slate-600/50 text-slate-300 flex items-center gap-1"><MessageSquare size={12} /> Add note</button>
+                        </div>
+                        {editingTotal === receipt.id && (
+                          <div className="flex items-center gap-2 mt-2 ml-6">
+                            <input type="number" value={editingTotalValue} onChange={(e) => setEditingTotalValue(e.target.value)} className="px-2 py-1 rounded text-sm bg-slate-700 border border-slate-600 text-slate-200 w-40" placeholder="New total VND" />
+                            <button onClick={() => adjustTotal(receipt.id, editingTotalValue)} className="p-1 rounded hover:bg-green-900/30 text-green-400"><Save size={14} /></button>
+                            <button onClick={() => setEditingTotal(null)} className="p-1 rounded hover:bg-red-900/30 text-red-400"><X size={14} /></button>
+                          </div>
+                        )}
+                        {editingNote === receipt.id && (
+                          <div className="flex items-center gap-2 mt-2 ml-6">
+                            <input type="text" value={editingNoteValue} onChange={(e) => setEditingNoteValue(e.target.value)} className="px-2 py-1 rounded text-sm bg-slate-700 border border-slate-600 text-slate-200 flex-1" placeholder="Add a note..." />
+                            <button onClick={() => saveReceiptNote(receipt.id, editingNoteValue)} className="p-1 rounded hover:bg-green-900/30 text-green-400"><Save size={14} /></button>
+                            <button onClick={() => setEditingNote(null)} className="p-1 rounded hover:bg-red-900/30 text-red-400"><X size={14} /></button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {verifiedTotals[receipt.id] && (
+                      <div className="bg-green-950/30 border border-green-700/30 rounded-lg p-2 mb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-green-400 text-xs"><CheckCircle size={14} /> <span>Total manually verified</span></div>
+                        <button onClick={() => unverifyTotal(receipt.id)} className="text-xs text-slate-500 hover:text-slate-300 underline">Undo</button>
+                      </div>
+                    )}
+                    {receiptNotes[receipt.id] && (
+                      <div className="bg-slate-800/50 border border-slate-700/30 rounded-lg p-2 mb-3 flex items-start gap-2">
+                        <MessageSquare size={14} className="text-slate-500 mt-0.5 shrink-0" />
+                        <p className="text-xs text-slate-400">{receiptNotes[receipt.id]}</p>
+                        <button onClick={() => { setEditingNote(receipt.id); setEditingNoteValue(receiptNotes[receipt.id]); }} className="ml-auto shrink-0 p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300"><Pencil size={11} /></button>
                       </div>
                     )}
                           {receipt.items.map((item, idx) => (
