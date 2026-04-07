@@ -429,6 +429,23 @@ export default function App() {
 
       setReceipts([newReceipt, ...receipts]);
       sendToSheets({...newReceipt, image_base64: base64});
+      // Send per-kilo price data to Sheets for price tracking
+      const priceItems = (newReceipt.items || []).filter(i => i.price_per_kg && i.weight_kg);
+      if (priceItems.length > 0) {
+        sendToSheets({
+          type: "price_tracker",
+          date: newReceipt.date,
+          store_name: newReceipt.store_name,
+          items: priceItems.map(i => ({
+            name: i.name,
+            original_name: i.original_name,
+            category: i.category,
+            price_per_kg: i.price_per_kg,
+            weight_kg: i.weight_kg,
+            total: i.total,
+          })),
+        });
+      }
       setProcessingStatus({ type: "success", message: "Receipt processed successfully!" });
     } catch (error) {
       console.error("Receipt processing error:", error);
@@ -444,6 +461,23 @@ export default function App() {
     const updated = { ...pendingReceipt, date: correctedDate };
     setReceipts([updated, ...receipts]);
     sendToSheets({ ...updated, image_base64: pendingBase64 });
+    // Send per-kilo price data to Sheets for price tracking
+    const priceItems = (updated.items || []).filter(i => i.price_per_kg && i.weight_kg);
+    if (priceItems.length > 0) {
+      sendToSheets({
+        type: "price_tracker",
+        date: updated.date,
+        store_name: updated.store_name,
+        items: priceItems.map(i => ({
+          name: i.name,
+          original_name: i.original_name,
+          category: i.category,
+          price_per_kg: i.price_per_kg,
+          weight_kg: i.weight_kg,
+          total: i.total,
+        })),
+      });
+    }
     setPendingReceipt(null);
     setPendingBase64(null);
     setPendingDateInput("");
@@ -1410,6 +1444,9 @@ export default function App() {
                                   {item.category} &bull; {item.quantity}
                                   {item.unit_price > 0
                                     ? ` @ ${fmtVND(item.unit_price)}`
+                                    : ""}
+                                  {item.price_per_kg
+                                    ? ` (${item.weight_kg}kg @ ${fmtVND(item.price_per_kg)}/kg)`
                                     : ""}
                                 </p>
                               </div>
