@@ -42,13 +42,14 @@ const COLORS = [
 ];
 
 const CATEGORIES = [
-  "Proteins",
-  "Vegetables & Fruits",
-  "Staples & Grains",
-  "Dairy & Eggs",
-  "Drinks & Beverages",
-  "Snacks & Sweets",
-  "Household & Cleaning",
+  "Meat",
+  "Vegetables",
+  "Fruit",
+  "Staples",
+  "Cleaning Products",
+  "Flowers",
+  "Other Groceries",
+  "Soda Water & Soft Drinks",
   "ORE (Official Residence)",
   "Other",
 ];
